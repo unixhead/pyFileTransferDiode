@@ -6,7 +6,10 @@ THIS IS A POC - DO NOT USE IN PRODUCTION IN RAW STATE!
 https://otnss.co.uk for paid support and development.
 Feel free to post queries/issues here.
 
+Requires Python 3.x
+
 Run the txFileTransferDiode.py on the high security / North side.
+
 Run the rxFileTransferDiode.py on the low security / South side.
 
 May need static ARP entries if using a geniune data diode.
