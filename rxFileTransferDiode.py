@@ -126,7 +126,7 @@ while True:
     debugLog("writing " + str(len(data)) + " bytes")
 
 
-    # check the packet is part of the current file we're writing and not an overalpping transfer
+    # check the packet is part of the current file we're writing and not an overlapping transfer
     if currentFile != fileName:
         debugLog("packet received for incorrect file")
         continue
