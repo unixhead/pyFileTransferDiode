@@ -76,7 +76,7 @@ while True:
     #debugLog("packet received " + str(len(message)) + " bytes")
 
     # Packet format is:
-    # messageType (int) - 0 = data transfer, 1 = FEC transfer, 69 = checksum, 99 = error
+    # messageType (int) - 0 = data transfer, 1 = FEC transfer, 2 = last FEC packet, 69 = checksum, 99 = error
     # currentSerial (int)
     # totalPackets (int)
     # filename (char[fileNameSize])
