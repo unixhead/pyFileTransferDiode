@@ -21,4 +21,4 @@ Configurations in files for the IP addressing, folders, etc.
 
 There are two versions:
 Basic - this just sends each file over UDP
-FEC - this breaks each file down to a number of smaller chunks including redundant blocks of information, so that loss of some chunks does not result in loss of the file.  
+FEC - this breaks each file down to a number of smaller chunks including redundant blocks of information, so corruption of data in transfer does not result in loss of the file. Note that this can't handle dropped packets at the minute so is a bit limited, will fix that shortly!
