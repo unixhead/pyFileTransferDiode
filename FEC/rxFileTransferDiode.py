@@ -27,13 +27,14 @@ import random
 import struct
 import time
 import zfec
+from datetime import datetime
 
 # IP address to listen on, this should be filtered by the OS or network architecture so only the transmit side can reach it. 
 fileIP = "127.0.0.1"
 filePort = 10337
 
 #size of data to be transferred - TODO - make this an MTU setting
-chunkSize=1450
+chunkSize=1400
 fileNameSize=12 #size of filename field
 
 headerStr="III"+str(fileNameSize)+"sI"
@@ -47,6 +48,13 @@ outputFolder = "out"
 
 #TODO - check outfolder exists
 
+
+#logigng configuration
+logFile="test.log"
+logFileHandle = open(logFile, "at")
+writeLogLevel=7
+printLogLevel=5
+
 maxPacket = 1500
 
 #outFile="out/out" + str(random.randrange(10000000,90000000))
@@ -57,8 +65,23 @@ serverSocket.bind((fileIP, filePort))
 def getTimeMS():
     return int(time.time()*1000)
 
-def debugLog(data):
-    print(data)
+
+#
+# debug logging
+#
+# levels are same as syslog but only use 3 of them:
+# 0 = emerg (min)
+# 5 = notice (all that might be useful)
+# 7 = debug (everything)
+def debugLog(data, level=0):
+    now = datetime.now()
+    dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+    if  writeLogLevel >= level:
+        timeStamp = int(time.time())
+        logFileHandle.write(dt_string + " " +  data + "\n")
+    if printLogLevel >= level:
+        print(dt_string + " " + data) 
+
 
 
 
@@ -73,10 +96,10 @@ while True:
     message, address = serverSocket.recvfrom(packetSize)
 
     #currentSerial,totalPackets,fileName,dataSize = struct.unpack(headerStr, message)
-    #debugLog("packet received " + str(len(message)) + " bytes")
+    debugLog("packet received " + str(len(message)) + " bytes", 7)
 
     # Packet format is:
-    # messageType (int) - 0 = data transfer, 1 = FEC transfer, 2 = last FEC packet, 69 = checksum, 99 = error
+    # messageType (int) - 0 = data transfer, 1 = FEC transfer,  2 = last FEC packet, 69 = checksum, 99 = error
     # currentSerial (int)
     # totalPackets (int)
     # filename (char[fileNameSize])
@@ -94,7 +117,7 @@ while True:
     if packetType == 99:        
         dataStr = "<" + str(dataSize) + "s"
         data = struct.unpack_from(dataStr, message, headerSize)[0]
-        debugLog("ERROR: " + str(data.decode("utf-8")))
+        debugLog("ERROR: " + str(data.decode("utf-8")), 0)
         continue # stop processing
 
 
@@ -103,26 +126,29 @@ while True:
     #debugLog("pre-filtered + " + fileName)
     fileName = fileName.replace('..','') #strip out potential parent directory command
     fileName = fileName.replace('/','') # remove path
-    #debugLog("receiving + " + fileName)
-    #debugLog(str(currentSerial) + " / " + str(totalPackets) + " - file: " + fileName + " size: " + str(dataSize))
+    debugLog("receiving + " + fileName, 7)
+    debugLog(str(currentSerial) + " / " + str(totalPackets) + " - file: " + fileName + " size: " + str(dataSize), 7)
 
     
     # check if creating a new file
     if writing == False:
         if packetType == 1 or packetType == 2:
-            debugLog("receiving FEC")
+            debugLog("receiving FEC", 5)
             # if it's a fec then write it to outputFolder + "/temp" + filename -fec/
             tmpFecPath = outputFolder + "/" + fileName + "-fec"
             if not os.path.isdir(tmpFecPath):
                 os.mkdir(tmpFecPath)
 
             fecList = os.listdir(tmpFecPath)
+            if len(fecList) == 0:
+                startTime = int(time.time())
+                debugLog("starting at " + str(startTime), 7)
             outFile = tmpFecPath + "/fec" + str(len(fecList) + 1)
-            debugLog("writing: " + outFile)
+            debugLog("writing: " + outFile, 5)
         elif packetType == 0: 
             # if it's a regular file then write straight to the out folder
             outFile = outputFolder + "/" + fileName
-            debugLog("receiving " + outFile)
+            debugLog("receiving " + outFile, 5)
             # see if file already exists
             if os.path.exists(outFile): # if it does then name this file with a timestamp afterwards
                 outFile = outFile + str(getTimeMS())
@@ -135,7 +161,7 @@ while True:
     dataStr = "<" + str(dataSize) + "s"
     pktSize=struct.calcsize(dataStr)
     data = struct.unpack_from(dataStr, message, headerSize)[0]
-    #debugLog("writing " + str(len(data)) + " bytes")
+    debugLog("writing " + str(len(data)) + " bytes to " + outFile, 7)
     
 
     # check the packet is part of the current file we're writing and not an overlapping transfer
@@ -144,7 +170,7 @@ while True:
 
         #TODO - set a timer on this as it may mean the old transfer dropped packets, so need to force close it and start on the new one
         
-        debugLog("packet received for incorrect file")
+        debugLog("packet received for incorrect file", 0)
         continue
     else:
         fOut.write(data)
@@ -161,9 +187,31 @@ while True:
         if packetType == 2:
             # type 2 is the last FEC in a series
             tmpFecPath = outputFolder + "/" + fileName + "-fec"
-            debugLog("reassembling " + fileName + " from fecs in " + tmpFecPath)
+            debugLog("reassembling " + fileName + " from fecs in " + tmpFecPath, 5)
             
-            #zunfec
+
+            #check all files are the same size, if not then unfec will fail so delete any incorrect ones
+            fecs = os.listdir(tmpFecPath)
+            fecSize = 0
+            for fec in fecs:
+                #find biggest file, this should be same size as all of them
+                curSize=os.stat(tmpFecPath + "/" + fec).st_size
+                if curSize > fecSize: #last fec was too small
+                    fecSize = curSize
+            
+            debugLog("fec size is " + str(fecSize), 7)
+            
+            #now delete any that are smaller than fecSize
+            for fec in fecs:
+                curSize=os.stat(tmpFecPath + "/" + fec).st_size
+                if curSize < fecSize:
+                    debugLog("fec too small, deleting :" + tmpFecPath + "/" + fec, 7)
+                    os.remove(tmpFecPath + "/" + fec)
+
+            # now try to unfec the remaining ones
+            # regenerate the list increase we deleted some
+            fecs = False
+            fecs = os.listdir(tmpFecPath)
             
             # get file to write
             outFile = outputFolder + "/" + fileName
@@ -172,8 +220,6 @@ while True:
             fOut = open(outFile, "wb")
 
             # get list of handles to the FECs
-            tmpFecPath = outputFolder + "/" + fileName + "-fec"
-            fecs = os.listdir(tmpFecPath)
 
             fecHandles = []
             for fec in fecs:
@@ -181,15 +227,25 @@ while True:
                 fecHandles.append(open(fecName, 'rb'))
 
             zfecWorked = True
-            try:
+            try:                
                 zfec.filefec.decode_from_files(fOut, fecHandles, verbose=False)
             except:
                 zfecWorked = False
 
+            # close all the file handles
+            debugLog("closing file handles to FECs", 7)
+            for fecHandle in fecHandles:
+                fecHandle.close()
 
             #check worked
             if zfecWorked:
-                debugLog("Successfully wrote " + outFile)
+                debugLog("Successfully wrote " + outFile, 5)
+                endTime = int(time.time())
+                elapsedTime=(endTime - startTime) # time in seconds
+                outputSize=os.stat(outFile).st_size/1024 #size in kb
+                debugLog("Transferred " + str(outputSize) + " KB in " + str(elapsedTime) + " seconds - RATE: " + str( outputSize / elapsedTime ) + " KB/s", 5)
+
+
                 #delete fecs
                 for fec in fecs:
                     os.remove(tmpFecPath + "/" + fec)
@@ -197,7 +253,7 @@ while True:
                 #delete tmpfecpath
                 os.rmdir(tmpFecPath)
             else:
-                debugLog("unfec failed, leaving raw files in output directory " + str(tmpFecPath))
+                debugLog("unfec failed, leaving raw files in output directory " + str(tmpFecPath), 0)
 
 
 print("done")

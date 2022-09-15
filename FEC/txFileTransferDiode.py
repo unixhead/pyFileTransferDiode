@@ -54,7 +54,7 @@ if defaultFecRatio > 1 or defaultFecRatio < 0:
     exit
 
 #size of data to be transferred - TODO - make this an MTU setting
-chunkSize=1450 # size of data in each packet
+chunkSize=1400 # size of data in each packet
 
 # introduced a delay between packets to lower chances of drops
 # if network is a bit slower then may need to increase this, but obviously decreases throughput
@@ -94,7 +94,7 @@ def sendFile(fileName, type = 0, overrideFileName = False):
     fH = open(fileName, "rb")
     fileSize=os.stat(fileName).st_size
     debugLog("Sending file: " + str(fileName) + " - size: " + str(fileSize))
-    num = int( fileSize / chunkSize) + 1
+    num = math.ceil( fileSize / chunkSize)
     i=0
 
     # build packet and transmit
@@ -133,26 +133,23 @@ def sendFile(fileName, type = 0, overrideFileName = False):
 def processFile(fileName):
     debugLog("Processing file " + fileName)
     # work out K & M values
-    # minimum for K = 10 (how many blocks needed to recreate file)
-    # minimum for M = 20 (how many blocks)
+    # K = how many blocks needed to recreate file
+    # M = how many blocks to break file into, max 256
     
+    #set using blocksPerMeg so I can play around tuning it
+    blocksPerMeg = 0.1
+    minBlocks = 20
     
-    numBlocks = 20
+    fileSize=os.stat(fileName).st_size
+    numBlocks = int((fileSize/1024/1024) * blocksPerMeg)
+    if numBlocks < minBlocks:
+        numBlocks = minBlocks
+    if numBlocks > 256:
+        numBlocks = 256
+
     minGoodBlocks = int(defaultFecRatio * numBlocks)
 
-    fileSize=os.stat(fileName).st_size
-    # if file is larger than 1GB then probably want to use a few more chunks
-    if  fileSize > (100 * 1024 * 1024): # 100meg
-        # round up so we always end up with too many blocks rather than too few
-        debugLog("File over 1gig, sending in 100 blocks instead")
-        numBlocks = 100
-        minGoodBlocks = int(defaultFecRatio * numBlocks)
-    elif fileSize > (1000 * 1024 * 1024):
-        #bigger than 1 gig
-        numGigs = int(fileSize / (1000 * 1024 * 1024))
-        numBlocks = numGigs * 200
-        minGoodBlocks = int(defaultFecRatio * numBlocks)
-
+    debugLog("sending with numBlocks: " + str(numBlocks) + " and min: " + str(minGoodBlocks))
 
     fH = open(fileName, "rb")
     zfec.filefec.encode_to_files(fH, fileSize, tempFolder, "tmp",  minGoodBlocks, numBlocks, ".fec", True, True)
@@ -165,7 +162,7 @@ def processFile(fileName):
             packetType = 2
         else: 
             packetType = 1
-
+        debugLog("Sending FEC # " + str(n))
         #send it
         sendFile(tempFolder + "/" + fec, packetType, fileName)
 
