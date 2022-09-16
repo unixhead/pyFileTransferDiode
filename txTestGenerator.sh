@@ -11,4 +11,4 @@ mv ${TIME}.bin ${INFOLDER}
 SLEEPTIME=$(( $RANDNUM * 1.2 )) #wait before sending next file
 echo "sleeping"
 sleep $SLEEPTIME
-./txTest.sh
+./txTestGenerator.sh
