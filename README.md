@@ -44,6 +44,8 @@ In testing with transfers of large amounts of data, there were some losses even 
 * Store everything until someone manually confirms it's been transferred.
 * Store everything for a set period, e.g. a week, and hope that someone validates the data each week.
 * Send some kind of checksum/hash for each file and validate it (this is on the roadmap anyway!).
+* Retransmit the data a few times.
+* Cope with gaps in the data (although the code in it's current state might barf if this happens). 
 * Use forward error correction.
 
 FEC is not an absolute fix, it works on a ratio of how much redundancy you want, more redundancy = more data needing to be transferred = lower throughput = less data you can actually send. Therefore it's a balancing act between the level of redundancy against the likely reliability of the systems involved, which will vary each time. There's a basic test script to help with this, which is likely to develop in future.
